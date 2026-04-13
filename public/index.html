@@ -1,14 +1,166 @@
-Airsoft Arena
-Live player count
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Airsoft Arena Player Count</title>
+  <style>
+    :root {
+      --bg: #111;
+      --card: #1b1b1b;
+      --text: #f5f5f5;
+      --muted: #b5b5b5;
+      --accent: #2d2d2d;
+      --border: #2f2f2f;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Arial, Helvetica, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 20px;
+    }
+    .wrap { width: 100%; max-width: 520px; }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 24px;
+      margin-bottom: 16px;
+    }
+    h1, h2 { margin: 0 0 10px 0; font-weight: 700; }
+    .sub { color: var(--muted); margin: 0 0 20px 0; font-size: 14px; }
+    .count { font-size: 88px; font-weight: 700; line-height: 1; margin: 10px 0 8px 0; }
+    .label { color: var(--muted); font-size: 16px; }
+    .updated { margin-top: 12px; color: var(--muted); font-size: 13px; }
+    .row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
+    input, button {
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      padding: 12px 14px;
+      font-size: 16px;
+    }
+    input {
+      background: #0f0f0f;
+      color: var(--text);
+      width: 100%;
+    }
+    .half { flex: 1 1 150px; }
+    button {
+      background: var(--accent);
+      color: var(--text);
+      cursor: pointer;
+      min-width: 80px;
+    }
+    button:hover { filter: brightness(1.1); }
+    .msg { margin-top: 12px; min-height: 20px; font-size: 14px; color: var(--muted); }
+    .small { font-size: 12px; color: var(--muted); margin-top: 8px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1>Airsoft Arena</h1>
+      <p class="sub">Live player count</p>
+      <div class="count" id="count">0</div>
+      <div class="label">players currently checked in</div>
+      <div class="updated" id="updated">Waiting for update...</div>
+    </div>
 
-0
-players currently checked in
-Waiting for update...
-Update Count
-Staff only
+    <div class="card">
+      <h2>Update Count</h2>
+      <p class="sub">Staff only</p>
 
-Admin PIN
-Player count
--1
-+1
-Set
+      <div class="row">
+        <input class="half" id="pin" type="password" inputmode="numeric" autocomplete="off" placeholder="Admin PIN" />
+        <input class="half" id="newCount" type="number" min="0" step="1" placeholder="Player count" />
+      </div>
+
+      <div class="row">
+        <button onclick="changeCount(-1)">-1</button>
+        <button onclick="changeCount(1)">+1</button>
+        <button onclick="setCount()">Set</button>
+      </div>
+
+      <div class="msg" id="msg"></div>
+      <div class="small" id="status"></div>
+    </div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const countEl = document.getElementById("count");
+    const updatedEl = document.getElementById("updated");
+    const pinEl = document.getElementById("pin");
+    const newCountEl = document.getElementById("newCount");
+    const msgEl = document.getElementById("msg");
+    const statusEl = document.getElementById("status");
+
+    const socket = io();
+
+    function render(data) {
+      countEl.textContent = data.count;
+      newCountEl.value = data.count;
+      const time = new Date(data.updatedAt);
+      updatedEl.textContent = "Last updated: " + time.toLocaleString();
+    }
+
+    socket.on("countUpdated", render);
+
+    async function fetchCurrent() {
+      const res = await fetch("/api/count");
+      const data = await res.json();
+      render(data);
+    }
+
+    async function fetchStatus() {
+      try {
+        const res = await fetch("/api/status");
+        const data = await res.json();
+        statusEl.textContent = "Server loaded. PIN length: " + data.pinLength;
+      } catch (e) {
+        statusEl.textContent = "";
+      }
+    }
+
+    async function sendCount(nextCount) {
+      msgEl.textContent = "Saving...";
+      const res = await fetch("/api/count", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          pin: String(pinEl.value).trim(),
+          count: Number(nextCount)
+        })
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        msgEl.textContent = data.details ? data.error + ": " + data.details : (data.error || "Could not update count");
+        return;
+      }
+
+      msgEl.textContent = "Updated";
+      render(data);
+    }
+
+    async function setCount() {
+      await sendCount(newCountEl.value);
+    }
+
+    async function changeCount(amount) {
+      const current = Number(newCountEl.value || countEl.textContent || 0);
+      const next = Math.max(0, current + amount);
+      await sendCount(next);
+    }
+
+    fetchCurrent();
+    fetchStatus();
+  </script>
+</body>
+</html>
